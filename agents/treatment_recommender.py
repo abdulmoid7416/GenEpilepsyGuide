@@ -47,19 +47,22 @@ class TreatmentRecommenderAgent:
         self.llm = ChatGroq(
             model="qwen/qwen3-32b",
             groq_api_key=self.GROQ_API_KEY,
-            temperature=0.3,
-            max_tokens=1000
+            temperature=0.2,
+            max_tokens=4000  # Increased for comprehensive treatment recommendations
         )
 
         # Prompt template for generating treatment pathway recommendation
         self.recommendation_prompt = ChatPromptTemplate.from_template("""
             You are an expert in epilepsy treatment guidelines. Based on the following retrieved context from official guidelines, 
-            recommend a treatment pathway for the epilepsy syndromes: {syndromes}.
+            recommend a comprehensive treatment pathway for the epilepsy syndrome: {syndromes}.
 
             Retrieved context (each chunk followed by its source):
             {context}
 
-            Provide a clear, step-by-step treatment pathway for each syndrome listed, citing relevant guidelines where possible. 
+            IMPORTANT: If the retrieved context does not contain specific information related to the syndrome "{syndromes}", 
+            respond with: "Information related to {syndromes} is not found in the guidelines database."
+
+            If the context does contain relevant information, provide a clear, step-by-step treatment pathway for the syndrome listed, citing relevant guidelines where possible. 
             For each key piece of information, cite the source in the exact format: [document name(year), section name, page number] 
             immediately after the statement. Use the sources provided in the context.
 
@@ -98,7 +101,7 @@ class TreatmentRecommenderAgent:
                 # Query Pinecone directly
                 results = self.index.query(
                     vector=query_embedding,
-                    top_k=5,
+                    top_k=8,  # Increased to get more context
                     namespace=self.NAMESPACE,
                     include_metadata=True
                 )

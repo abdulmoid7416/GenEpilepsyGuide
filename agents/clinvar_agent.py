@@ -208,7 +208,7 @@ EPILEPSY_SYNDROMES_JSON
                     }
                 ],
                 temperature=0.1,
-                max_tokens=2000
+                max_tokens=3000
             )
             
             formatted_result = response.choices[0].message.content
