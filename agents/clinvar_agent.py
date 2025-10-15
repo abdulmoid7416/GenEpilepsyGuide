@@ -213,11 +213,25 @@ EPILEPSY_SYNDROMES_JSON
             
             formatted_result = response.choices[0].message.content
             
-            # Remove thinking tags if present
+            # Debug: Check if thinking tags are present
+            if "<think>" in formatted_result:
+                print("🔍 Found <think> tags in LLM response, removing them...")
+                original_length = len(formatted_result)
+            
+            # Remove thinking tags if present - do this BEFORE any other processing
             if "<think>" in formatted_result and "</think>" in formatted_result:
                 # Remove everything between <think> and </think> including the tags
                 formatted_result = re.sub(r'<think>.*?</think>', '', formatted_result, flags=re.DOTALL)
                 formatted_result = formatted_result.strip()
+            
+            # Also remove any standalone thinking tags that might be present
+            formatted_result = re.sub(r'<think>.*?</think>', '', formatted_result, flags=re.DOTALL | re.IGNORECASE)
+            formatted_result = formatted_result.strip()
+            
+            # Debug: Show what was removed
+            if "<think>" in response.choices[0].message.content:
+                new_length = len(formatted_result)
+                print(f"   Removed {original_length - new_length} characters of thinking content")
             
             # Extract the doctor-friendly report and epilepsy syndromes
             doctor_report, epilepsy_syndromes = self._parse_llm_response(formatted_result)
@@ -237,6 +251,9 @@ EPILEPSY_SYNDROMES_JSON
         Expects the marker "EPILEPSY_SYNDROMES_JSON" followed by a JSON array.
         """
         try:
+            # First, remove any remaining thinking tags that might have been missed
+            llm_output = re.sub(r'<think>.*?</think>', '', llm_output, flags=re.DOTALL | re.IGNORECASE)
+            
             # Clean up any unwanted headers that might appear
             # Remove various forms of OUTPUT headers
             llm_output = re.sub(r'^\s*\*?\*?OUTPUT\s+1\s*-?\s*CLINICAL\s+REPORT\*?\*?\s*:?\s*\n?', '', llm_output, flags=re.IGNORECASE | re.MULTILINE).strip()
