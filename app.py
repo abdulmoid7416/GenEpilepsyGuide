@@ -96,6 +96,9 @@ def main():
                     }
                 }
 
+                # Debug: Print the query being made
+                st.write(f"🔍 Querying ClinVar for: **{gene.strip()}** variant **{variant.strip()}**")
+                
                 clinvar_out = st.session_state.planner.clinvar_agent.process(state)
 
                 # Save to session
@@ -157,6 +160,13 @@ def main():
             for key in list(st.session_state.keys()):
                 if key.startswith('clinvar_') or key in ['gene', 'variant']:
                     del st.session_state[key]
+            
+            # Also clear and reinitialize the planner to avoid stale state
+            if 'planner' in st.session_state:
+                del st.session_state.planner
+            if 'workflow' in st.session_state:
+                del st.session_state.workflow
+                
             st.rerun()
 
         # Syndromes selection
