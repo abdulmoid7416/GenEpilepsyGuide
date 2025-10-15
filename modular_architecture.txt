@@ -1,0 +1,194 @@
+Epilepsy Treatment Planner - Modular Architecture
+
+┌─────────────────────────────────────────────────────────────────┐
+│                        app.py (Orchestrator)                   │
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │              EpilepsyTreatmentPlanner                   │    │
+│  │  - Initializes all agents                              │    │
+│  │  - Creates LangGraph workflow                          │    │
+│  │  - Manages linear workflow execution                   │    │
+│  │  - Handles Streamlit UI (two-step process)            │    │
+│  │  - State management and session handling               │    │
+│  └─────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     agents/ Directory                          │
+│                                                                 │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │
+│  │ input_parser.py │  │clinvar_agent.py │  │treatment_       │ │
+│  │                 │  │                 │  │recommender.py   │ │
+│  │ - InputParser   │  │ - ClinVarAgent  │  │                 │ │
+│  │   Agent         │  │                 │  │ - Treatment     │ │
+│  │ - Groq LLM      │  │ - NCBI E-utils  │  │   Recommender   │ │
+│  │ - JSON parsing  │  │   API queries   │  │   Agent         │ │
+│  │ - Data          │  │ - Variant data  │  │                 │ │
+│  │   extraction    │  │   retrieval     │  │ - Pinecone      │ │
+│  │                 │  │ - Doctor-       │  │   vector store  │ │
+│  │ Extracts:       │  │   friendly      │  │ - Groq LLM      │ │
+│  │ • Gene          │  │   formatting    │  │ - RAG-based     │ │
+│  │ • Variant       │  │ - Syndrome      │  │   treatment     │ │
+│  │ • Demographics  │  │   extraction    │  │   pathways      │ │
+│  │ • Phenotypes    │  │                 │  │ - Citation      │ │
+│  │                 │  │ Provides:       │  │   generation    │ │
+│  │                 │  │ • Clinical      │  │                 │ │
+│  │                 │  │   reports       │  │ Generates:      │ │
+│  │                 │  │ • Epilepsy      │  │ • Treatment     │ │
+│  │                 │  │   syndromes     │  │   pathways      │ │
+│  │                 │  │ • Raw ClinVar   │  │ • Evidence-     │ │
+│  │                 │  │   data          │  │   based recs    │ │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘ │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │                    __init__.py                          │   │
+│  │                                                         │   │
+│  │  - Package initialization                               │   │
+│  │  - Agent imports and exports                            │   │
+│  │  - Clean namespace management                           │   │
+│  └─────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+
+Workflow Execution Flow:
+
+1. User Input → Streamlit UI (app.py)
+   ├─ Gene symbol (e.g., SCN1A, TSC2)
+   └─ Variant notation (e.g., p.Arg905Gln, c.3733C>T)
+
+2. "Search ClinVar" Button → LangGraph Workflow (Optional)
+   └─ Can also directly query ClinVar without full workflow
+
+3. ClinVar Query Process:
+   
+   input_parser.py → clinvar_agent.py → treatment_recommender.py
+         │                  │                      │
+         ▼                  ▼                      ▼
+   Parse patient    Query ClinVar API     Generate treatment
+   description      • Variant data        recommendations
+   • Gene           • Clinical sig.       • Vector search
+   • Variant        • Syndromes          • RAG retrieval
+   • Demographics   • HPO terms          • Citation
+   • Phenotypes     • LLM formatting     • Evidence-based
+                    
+4. Interactive UI Flow:
+   
+   ┌──────────────────────────────────────────────────────┐
+   │ Step 1: ClinVar Search                               │
+   │  - Enter gene and variant                           │
+   │  - Click "Search ClinVar"                           │
+   │  - View doctor-friendly reports (tabbed if multiple)│
+   │  - View raw ClinVar JSON (optional)                 │
+   └──────────────────────────────────────────────────────┘
+                         │
+                         ▼
+   ┌──────────────────────────────────────────────────────┐
+   │ Step 2: Syndrome Selection & Treatment               │
+   │  - Select epilepsy syndrome from dropdown           │
+   │  - View guidelines database info                     │
+   │  - Click "Recommend Treatment"                      │
+   │  - View treatment pathways with citations           │
+   └──────────────────────────────────────────────────────┘
+
+State Structure (LangGraph):
+
+AgentState (TypedDict):
+├─ input: str                              # Patient description
+├─ parsed_data: Dict[str, Any]            # Structured data from parser
+│   ├─ gene: str
+│   ├─ variant: str
+│   ├─ variant_type: str
+│   ├─ demographics: dict
+│   └─ phenotypes: list
+├─ clinvar_results: List[Dict[str, Any]]  # Raw ClinVar data
+├─ clinvar_syndromes: List[str]           # Epilepsy syndromes
+└─ treatments: str                         # Treatment recommendations
+
+Benefits of This Modular Architecture:
+
+✅ **Separation of Concerns**: Each agent has a single, well-defined responsibility
+   • InputParser: Natural language → Structured data
+   • ClinVarAgent: Gene/variant → Clinical information
+   • TreatmentRecommender: Syndrome → Evidence-based treatment
+
+✅ **Maintainability**: Easy to modify individual agents without affecting others
+   • Update ClinVar formatting without touching treatment logic
+   • Change LLM provider in one place
+   • Add new treatment guidelines to vector store independently
+
+✅ **Testability**: Each agent can be tested in isolation
+   • Unit tests for each agent's process() method
+   • Mock API responses for ClinVar
+   • Test vector retrieval separately
+
+✅ **Reusability**: Agents can be reused in other workflows
+   • ClinVarAgent can be used in variant interpretation tools
+   • TreatmentRecommender can work with other syndrome sources
+   • InputParser can extract data for different genetic conditions
+
+✅ **Scalability**: Easy to add new agents or modify existing ones
+   • Add OMIM phenotype series lookup
+   • Add clinical trial matching
+   • Add pharmacogenomics recommendations
+   • Add drug interaction checking
+
+✅ **Code Organization**: Clear structure with dedicated files
+   • agents/ directory contains all specialized logic
+   • app.py focuses on orchestration and UI
+   • config.py centralizes configuration
+   • demo.py shows programmatic usage
+
+✅ **Error Isolation**: Errors in one agent don't cascade
+   • ClinVar API failures don't crash the app
+   • Pinecone connection issues are handled gracefully
+   • LLM failures return informative messages
+
+✅ **Team Development**: Different developers can work on different agents
+   • Frontend team: app.py and UI components
+   • API team: ClinVar and Pinecone integrations
+   • ML team: LLM prompts and RAG improvements
+
+✅ **Simplicity**: No unnecessary inheritance or abstraction layers
+   • Each agent is a standalone class
+   • Direct method calls, no complex patterns
+   • Easy to understand and onboard new developers
+
+✅ **Direct Implementation**: Each agent contains only what it needs
+   • No shared base classes
+   • No hidden dependencies
+   • Explicit imports and clear interfaces
+
+API Integrations per Agent:
+
+input_parser.py:
+└─ Groq API (qwen/qwen3-32b)
+
+clinvar_agent.py:
+├─ NCBI E-utilities (esearch, esummary)
+└─ Groq API (qwen/qwen3-32b for formatting)
+
+treatment_recommender.py:
+├─ Pinecone (vector store queries)
+├─ HuggingFace (pubmedbert embeddings)
+└─ Groq API (qwen/qwen3-32b for generation)
+
+Configuration Management:
+
+config.py provides centralized settings:
+├─ GROQ_API_KEY
+├─ PINECONE_API_KEY
+├─ GROQ_MODEL = "qwen/qwen3-32b"
+├─ BIOMEDICAL_EMBEDDING_MODEL = "NeuML/pubmedbert-base-embeddings"
+├─ PINECONE_INDEX_NAME = "epilepsy-guidelines"
+└─ Application constants
+
+Session State Management (Streamlit):
+
+st.session_state stores:
+├─ planner: EpilepsyTreatmentPlanner instance
+├─ workflow: Compiled LangGraph workflow
+├─ clinvar_results: List of variant data
+├─ clinvar_syndromes: Extracted syndromes
+├─ clinvar_raw: Raw JSON from ClinVar
+├─ clinvar_doctor_reports: Formatted reports
+├─ gene: User input gene symbol
+└─ variant: User input variant notation

@@ -1,0 +1,307 @@
+Epilepsy Treatment Planner - LangGraph Workflow
+
+═══════════════════════════════════════════════════════════════
+                    LINEAR WORKFLOW ARCHITECTURE
+═══════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────┐
+│                    USER INTERFACE (Streamlit)               │
+│                                                             │
+│  Step 1: Input Collection                                  │
+│  ┌───────────────┐  ┌───────────────┐                      │
+│  │ Gene Symbol   │  │ Variant       │                      │
+│  │ (e.g., SCN1A) │  │ (e.g., c.3733)│                      │
+│  └───────────────┘  └───────────────┘                      │
+│           │                 │                               │
+│           └────────┬────────┘                               │
+│                    ▼                                        │
+│         ┌────────────────────┐                             │
+│         │ Search ClinVar     │                             │
+│         └────────────────────┘                             │
+└─────────────────────────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│              LANGGRAPH WORKFLOW (Sequential)                │
+│                                                             │
+│  ┌───────────────────────────────────────────────────────┐ │
+│  │                                                        │ │
+│  │  START                                                 │ │
+│  │    │                                                   │ │
+│  │    ▼                                                   │ │
+│  │  ┌─────────────────────────────────────┐              │ │
+│  │  │  Node 1: input_parser               │              │ │
+│  │  │  Agent: InputParserAgent            │              │ │
+│  │  │  LLM: Groq (qwen/qwen3-32b)        │              │ │
+│  │  ├─────────────────────────────────────┤              │ │
+│  │  │ Input:  state["input"]             │              │ │
+│  │  │ Process:                            │              │ │
+│  │  │  • Extract gene symbol              │              │ │
+│  │  │  • Extract variant notation         │              │ │
+│  │  │  • Extract demographics             │              │ │
+│  │  │  • Extract phenotypes               │              │ │
+│  │  │ Output: state["parsed_data"]       │              │ │
+│  │  └─────────────────────────────────────┘              │ │
+│  │    │                                                   │ │
+│  │    ▼                                                   │ │
+│  │  ┌─────────────────────────────────────┐              │ │
+│  │  │  Node 2: clinvar_agent              │              │ │
+│  │  │  Agent: ClinVarAgent                │              │ │
+│  │  │  API: NCBI E-utilities              │              │ │
+│  │  │  LLM: Groq (qwen/qwen3-32b)        │              │ │
+│  │  ├─────────────────────────────────────┤              │ │
+│  │  │ Input:  state["parsed_data"]       │              │ │
+│  │  │         • gene                      │              │ │
+│  │  │         • variant                   │              │ │
+│  │  │ Process:                            │              │ │
+│  │  │  • Query ClinVar API                │              │ │
+│  │  │  • Retrieve variant data            │              │ │
+│  │  │  • Format doctor-friendly reports   │              │ │
+│  │  │  • Extract epilepsy syndromes       │              │ │
+│  │  │ Output:                             │              │ │
+│  │  │  • state["clinvar_results"]        │              │ │
+│  │  │  • state["clinvar_syndromes"]      │              │ │
+│  │  │  • state["clinvar_raw"]            │              │ │
+│  │  │  • state["clinvar_doctor_reports"] │              │ │
+│  │  └─────────────────────────────────────┘              │ │
+│  │    │                                                   │ │
+│  │    ▼                                                   │ │
+│  │  ┌─────────────────────────────────────┐              │ │
+│  │  │  Node 3: treatment_recommender      │              │ │
+│  │  │  Agent: TreatmentRecommenderAgent   │              │ │
+│  │  │  Vector DB: Pinecone                │              │ │
+│  │  │  LLM: Groq (qwen/qwen3-32b)        │              │ │
+│  │  │  Embeddings: PubMedBERT             │              │ │
+│  │  ├─────────────────────────────────────┤              │ │
+│  │  │ Input:  state["input"]             │              │ │
+│  │  │         state["clinvar_syndromes"] │              │ │
+│  │  │ Process:                            │              │ │
+│  │  │  FOR EACH syndrome:                 │              │ │
+│  │  │   • Generate query embedding        │              │ │
+│  │  │   • Search Pinecone (top-k=5)      │              │ │
+│  │  │   • Retrieve guideline chunks       │              │ │
+│  │  │   • Format context with sources     │              │ │
+│  │  │   • Generate treatment pathway      │              │ │
+│  │  │   • Add citations                   │              │ │
+│  │  │ Output: state["treatments"]        │              │ │
+│  │  └─────────────────────────────────────┘              │ │
+│  │    │                                                   │ │
+│  │    ▼                                                   │ │
+│  │  END                                                   │ │
+│  │                                                        │ │
+│  └───────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+                      │
+                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    USER INTERFACE (Streamlit)               │
+│                                                             │
+│  Step 2: Results Display                                   │
+│  ┌─────────────────────────────────────────────┐           │
+│  │ Doctor-Friendly ClinVar Summary             │           │
+│  │ ┌─────────┬─────────┬─────────┐             │           │
+│  │ │ Entry 1 │ Entry 2 │ Entry 3 │ (Tabs)      │           │
+│  │ └─────────┴─────────┴─────────┘             │           │
+│  │                                             │           │
+│  │ • Variant Summary                           │           │
+│  │ • Clinical Significance                     │           │
+│  │ • Epilepsy Syndromes                        │           │
+│  │ • Clinical Phenotypes (HPO)                 │           │
+│  │ • Other Associated Conditions               │           │
+│  │ • Molecular Details                         │           │
+│  └─────────────────────────────────────────────┘           │
+│                     │                                       │
+│                     ▼                                       │
+│  ┌─────────────────────────────────────────────┐           │
+│  │ Syndrome Selection Dropdown                 │           │
+│  │ (Epilepsy syndromes extracted by LLM)      │           │
+│  └─────────────────────────────────────────────┘           │
+│                     │                                       │
+│                     ▼                                       │
+│  ┌─────────────────────────────────────────────┐           │
+│  │ Recommend Treatment Button                  │           │
+│  └─────────────────────────────────────────────┘           │
+│                     │                                       │
+│                     ▼                                       │
+│  ┌─────────────────────────────────────────────┐           │
+│  │ Treatment Recommendations                    │           │
+│  │                                             │           │
+│  │ ## Treatment for [Syndrome Name]            │           │
+│  │                                             │           │
+│  │ Step-by-step treatment pathway with:        │           │
+│  │ • First-line medications                    │           │
+│  │ • Second-line options                       │           │
+│  │ • Special considerations                    │           │
+│  │ • Citations [Guideline, Section, Page]     │           │
+│  └─────────────────────────────────────────────┘           │
+└─────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+                      STATE STRUCTURE
+═══════════════════════════════════════════════════════════════
+
+AgentState (TypedDict):
+{
+    "input": str,
+        ↳ Patient description or summary
+        ↳ Example: "3-year-old with SCN1A c.3733C>T variant..."
+    
+    "parsed_data": {
+        "gene": str,              # e.g., "SCN1A"
+        "variant": str,           # e.g., "c.3733C>T" or "p.Arg905Gln"
+        "variant_type": str,      # e.g., "missense", "frameshift"
+        "demographics": {
+            "age": str,           # e.g., "3 years"
+            "sex": str,           # e.g., "female"
+            "ethnicity": str      # e.g., "Javanese"
+        },
+        "phenotypes": [str, ...]  # e.g., ["febrile seizures", "myoclonic jerks"]
+    },
+    
+    "clinvar_results": [
+        {
+            "variant_id": str,
+            "title": str,
+            "clinical_significance": str,
+            "review_status": str,
+            # ... full ClinVar data
+        },
+        ...
+    ],
+    
+    "clinvar_syndromes": [str, ...],
+        ↳ Epilepsy syndromes extracted by LLM
+        ↳ Example: ["Dravet syndrome", "EIEE-6"]
+    
+    "treatments": str
+        ↳ Markdown-formatted treatment recommendations
+        ↳ Includes citations to guidelines
+        ↳ Separate sections for each syndrome
+}
+
+═══════════════════════════════════════════════════════════════
+                    WORKFLOW EDGES (LangGraph)
+═══════════════════════════════════════════════════════════════
+
+workflow.set_entry_point("input_parser")
+workflow.add_edge("input_parser", "clinvar_agent")
+workflow.add_edge("clinvar_agent", "treatment_recommender")
+workflow.add_edge("treatment_recommender", END)
+
+Note: This is a LINEAR workflow with NO conditional branching.
+All nodes execute sequentially in order.
+
+═══════════════════════════════════════════════════════════════
+                    DATA FLOW DIAGRAM
+═══════════════════════════════════════════════════════════════
+
+User Input
+   │
+   ├─ Gene: "SCN1A"
+   └─ Variant: "c.3733C>T"
+         │
+         ▼
+   ┌──────────────────┐
+   │ InputParserAgent │
+   └──────────────────┘
+         │
+         ├─ gene: "SCN1A"
+         ├─ variant: "c.3733C>T"
+         ├─ demographics: {...}
+         └─ phenotypes: [...]
+               │
+               ▼
+   ┌──────────────────┐
+   │  ClinVarAgent    │
+   └──────────────────┘
+         │
+         ├─ Query: "SCN1A[gene] AND c.3733C>T"
+         ├─ API Call: NCBI E-utilities
+         ├─ Raw Data: ClinVar JSON
+         ├─ LLM Format: Doctor-friendly report
+         └─ Extract: Epilepsy syndromes
+               │
+               ├─ clinvar_syndromes: ["Dravet syndrome", "EIEE-6"]
+               ├─ clinvar_doctor_reports: [{variant_id, title, report, syndromes}, ...]
+               └─ clinvar_raw: {full JSON}
+                     │
+                     ▼
+         [User selects syndrome: "Dravet syndrome"]
+                     │
+                     ▼
+   ┌──────────────────────────┐
+   │ TreatmentRecommenderAgent│
+   └──────────────────────────┘
+         │
+         ├─ Query: "How would you treat patient... Dravet syndrome"
+         ├─ Embed: PubMedBERT embedding
+         ├─ Search: Pinecone top-k=5
+         ├─ Retrieve: Guideline chunks
+         ├─ Context: [chunk1 + source, chunk2 + source, ...]
+         ├─ LLM Generate: Treatment pathway
+         └─ Output: Markdown with citations
+               │
+               ▼
+   Treatment Recommendations Display
+
+═══════════════════════════════════════════════════════════════
+                    TECHNOLOGY STACK
+═══════════════════════════════════════════════════════════════
+
+Frontend:
+└─ Streamlit (UI framework)
+
+Orchestration:
+└─ LangGraph (workflow management)
+
+LLM:
+├─ Groq API
+└─ Model: qwen/qwen3-32b
+    ├─ Temperature: 0 (parsing)
+    ├─ Temperature: 0.1 (ClinVar formatting)
+    └─ Temperature: 0.3 (treatment generation)
+
+Embeddings:
+├─ HuggingFace Transformers
+└─ Model: NeuML/pubmedbert-base-embeddings
+
+Vector Database:
+├─ Pinecone
+├─ Index: epilepsy-guidelines
+└─ Namespace: guidelines
+
+External APIs:
+├─ NCBI E-utilities (esearch, esummary)
+└─ Database: clinvar
+
+Treatment Guidelines:
+├─ NICE Guidelines (2025)
+└─ ILAE Guidelines (2006)
+
+═══════════════════════════════════════════════════════════════
+                    KEY FEATURES
+═══════════════════════════════════════════════════════════════
+
+✅ Linear Workflow: Simple, predictable execution flow
+✅ Multi-Variant Support: Handles multiple ClinVar entries with tabs
+✅ LLM Formatting: Doctor-friendly clinical reports
+✅ Syndrome Extraction: Automated epilepsy syndrome identification
+✅ RAG Architecture: Vector-based guideline retrieval
+✅ Citation Generation: Automatic source attribution
+✅ Interactive UI: Two-step process with user control
+✅ Session Management: Persistent state across interactions
+✅ Error Handling: Graceful failures with informative messages
+✅ No API Key Required for ClinVar: Public NCBI access
+
+═══════════════════════════════════════════════════════════════
+                    EXECUTION FLOW SUMMARY
+═══════════════════════════════════════════════════════════════
+
+1. User enters gene + variant
+2. System queries ClinVar API
+3. LLM formats clinical reports
+4. LLM extracts epilepsy syndromes
+5. User reviews reports and selects syndrome
+6. System queries Pinecone for guidelines
+7. LLM generates treatment pathway
+8. User reviews recommendations with citations

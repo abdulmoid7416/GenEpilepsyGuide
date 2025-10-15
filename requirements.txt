@@ -1,0 +1,15 @@
+streamlit
+langchain
+langchain-openai
+langchain-groq
+langgraph
+pinecone
+langchain-pinecone
+langchain-huggingface
+requests
+python-dotenv
+pydantic
+typing-extensions
+groq
+sentence-transformers
+torch
